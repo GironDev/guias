@@ -29,11 +29,10 @@ function App() {
       setCodigo('');
     }
   };
-
   const imprimirManifiesto = () => {
     const doc = new jsPDF();
     const fecha = new Date().toLocaleDateString();
-    const registrosPorPagina = 25 * 6;
+    const registrosPorPagina = 20 * 6;
 
     const registrosPorFecha = registros.reduce((acc, registro) => {
       if (!acc[registro.fecha]) {
@@ -54,7 +53,7 @@ function App() {
         const paginaRegistros = registrosDeFecha.slice(inicio, fin);
 
         const data = [];
-        for (let j = 0; j < 25; j++) {
+        for (let j = 0; j < 20; j++) {
           const row = [];
           for (let k = 0; k < 6; k++) {
             const registro = paginaRegistros[j * 6 + k];
@@ -64,7 +63,7 @@ function App() {
         }
 
         doc.text(`PÁGINA ${pagina}`, 10, 10);
-        doc.text(`FECHA MANIFIESTO PARA Servientrega - ${fecha}`, 60, 10);
+        doc.text(`FECHA MANIFIESTO PARA ________________ - ${fecha}`, 40, 10);
 
         doc.autoTable({
           startY: 20,
@@ -74,8 +73,20 @@ function App() {
           styles: { cellWidth: 30, minCellHeight: 10, fontSize: 10, halign: 'center' },
           headStyles: { fillColor: [255, 255, 255] },
           footStyles: { fillColor: [255, 255, 255] },
-          margin: { top: 10, bottom: 10, left: 10, right: 10 }
+          margin: { top: 10, bottom: 40, left: 10, right: 10 }
         });
+
+        // Añadir el pie de página
+        const pageHeight = doc.internal.pageSize.height;
+        doc.setFontSize(10);
+        // Primera línea del pie de página
+        doc.text('NOMBRE AUXILIAR DE RECOLECCIÓN', 10, pageHeight - 50);
+        doc.text('PLACA', 100, pageHeight - 50);
+        doc.text('FECHA RECOLECCIÓN', 140, pageHeight - 50);
+        
+        // Segunda línea del pie de página
+        doc.text('OBSERVACIONES', 10, pageHeight - 30);
+        doc.text(`TOTAL PIEZAS ENTREGADAS: ${registros.length}`, 150, pageHeight - 30);
 
         if (i < totalPaginas - 1) {
           doc.addPage();
@@ -87,6 +98,7 @@ function App() {
 
     doc.save('manifiesto.pdf');
   };
+
 
   return (
     <div className="App">
