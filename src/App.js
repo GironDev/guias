@@ -3,7 +3,7 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import axios from 'axios';
 import { format, parseISO } from 'date-fns';
-import logo from './assets/DROPI-PNG-LOGO.png'; // Asegúrate de ajustar la ruta
+import logo from './assets/DROPI-PNG-LOGO.png';
 import './App.css';
 
 const getFormattedDate = (dateString) => {
@@ -14,6 +14,30 @@ const getFormattedDate = (dateString) => {
 const getCurrentDate = () => {
   const now = new Date();
   return format(now, 'yyyy-MM-dd');
+};
+
+const getTransportadora = (codigo) => {
+  if (!codigo || typeof codigo !== 'string') {
+    return 'DESCONOCIDO';
+  }
+
+  if (codigo.startsWith('0240')) return 'ENVIA';
+  if (codigo.startsWith('219') || codigo.startsWith('220') || codigo.startsWith('221')) return 'SERVIENTREGA';
+  if (codigo.startsWith('2400')) return 'INTERRAPIDISIMO';
+  if (codigo.startsWith('363')) return 'COORDINADORA';
+  if (codigo.startsWith('609')) return 'TCC';
+  if (codigo.startsWith('859')) return 'DOMINA';
+  if (codigo.startsWith('234')) return '99MINUTOS';
+  return 'DESCONOCIDO';
+};
+
+const sanitizeCodigo = (codigo) => {
+  if (!codigo || typeof codigo !== 'string') return '';
+  
+  if (codigo.startsWith('7363') && codigo.endsWith('001')) {
+    return codigo.slice(1, -3);
+  }
+  return codigo;
 };
 
 function App() {
@@ -51,25 +75,15 @@ function App() {
     setError('');
   };
 
-  const sanitizeCodigo = (codigo) => {
-    if (codigo.startsWith('7363') && codigo.endsWith('001')) {
-      return codigo.slice(1, -3);
-    }
-    return codigo;
-  };
-
-  const getTransportadora = (codigo) => {
-    if (codigo.startsWith('0240')) return 'ENVIA';
-    if (codigo.startsWith('219') || codigo.startsWith('220') || codigo.starts.startsWith('221')) return 'SERVIENTREGA';
-    if (codigo.startsWith('2400')) return 'INTERRAPIDISIMO';
-    if (codigo.startsWith('363')) return 'COORDINADORA';
-    return 'DESCONOCIDO';
-  };
-
   const handleSubmit = async (event) => {
     event.preventDefault();
-    if (codigo.trim() !== '') {
+    if (codigo && codigo.trim() !== '') {
       const sanitizedCodigo = sanitizeCodigo(codigo);
+      if (sanitizedCodigo === '') {
+        setError('El código es inválido');
+        return;
+      }
+
       const codigoExistente = registros.some((registro) => registro.codigo === sanitizedCodigo);
 
       if (codigoExistente) {
@@ -92,7 +106,12 @@ function App() {
   };
 
   const handleDelete = async (id) => {
-    // Implementa la lógica para eliminar un registro si es necesario
+    try {
+      await axios.delete(`http://localhost:3001/api/registros/${id}`);
+      setRegistros((prevRegistros) => prevRegistros.filter((registro) => registro.id !== id));
+    } catch (err) {
+      console.error('Error al eliminar el registro:', err);
+    }
   };
 
   const handleMultiSubmit = async () => {
@@ -126,9 +145,9 @@ function App() {
     const fecha = getFormattedDate(searchDate);
     const registrosPorPagina = 20 * 6;
     const pageWidth = doc.internal.pageSize.width;
-
+  
     const registrosFiltrados = registros.filter(registro => registro.fecha === getFormattedDate(searchDate));
-
+  
     const registrosPorTransportadora = registrosFiltrados.reduce((acc, registro) => {
       if (!acc[registro.transportadora]) {
         acc[registro.transportadora] = [];
@@ -136,16 +155,16 @@ function App() {
       acc[registro.transportadora].push(registro);
       return acc;
     }, {});
-
+  
     for (const transportadora in registrosPorTransportadora) {
       const registrosDeTransportadora = registrosPorTransportadora[transportadora];
       const totalPaginas = Math.ceil(registrosDeTransportadora.length / registrosPorPagina);
-
+  
       for (let i = 0; i < totalPaginas; i++) {
         const inicio = i * registrosPorPagina;
         const fin = inicio + registrosPorPagina;
         const paginaRegistros = registrosDeTransportadora.slice(inicio, fin);
-
+  
         const data = [];
         for (let j = 0; j < 20; j++) {
           const row = [];
@@ -160,21 +179,21 @@ function App() {
           }
           data.push(row);
         }
-
+  
         doc.setFontSize(10);
         doc.setFont('helvetica', 'bold');
         doc.text(`PÁGINA ${i + 1} DE ${totalPaginas}`, 10, 10);
         doc.setFontSize(14);
         doc.setFont('helvetica', 'bold');
-
+  
         const text = `FECHA MANIFIESTO ${fecha} PARA ${transportadora}`;
         const textWidth = doc.getTextWidth(text);
         const textX = (pageWidth - textWidth - 60) / 2; // Ajusta el espacio para el logo
         doc.text(text, textX, 20);
-
+  
         // Añadir el logo a la derecha del texto
         doc.addImage(logo, 'PNG', textX + textWidth + 10, 10, 50, 20); // Ajusta la posición y el tamaño del logo según sea necesario
-
+  
         doc.autoTable({
           startY: 30, // Ajusta la posición de inicio para evitar superposición con el logo y el texto
           head: [['', '', '', '', '', '']],
@@ -185,7 +204,7 @@ function App() {
           footStyles: { fillColor: [255, 255, 255] },
           margin: { top: 10, bottom: 40, left: 10, right: 10 },
         });
-
+  
         const pageHeight = doc.internal.pageSize.height;
         doc.setFontSize(10);
         doc.setFont('helvetica', 'normal');
@@ -194,7 +213,7 @@ function App() {
         doc.text('FECHA RECOLECCIÓN', 140, pageHeight - 50);
         doc.text('OBSERVACIONES', 10, pageHeight - 30);
         doc.text(`TOTAL PIEZAS ENTREGADAS: ${registrosDeTransportadora.length}`, 140, pageHeight - 10);
-
+  
         if (
           i < totalPaginas - 1 ||
           Object.keys(registrosPorTransportadora).indexOf(transportadora) < Object.keys(registrosPorTransportadora).length - 1
@@ -203,12 +222,14 @@ function App() {
         }
       }
     }
-
-    doc.save('manifiesto.pdf');
+  
+    doc.save(`${searchDate}.pdf`);
   };
+  
 
   const contarTransportadoras = () => {
-    return registros.reduce((acc, registro) => {
+    const registrosFiltrados = registros.filter(registro => registro.fecha === getFormattedDate(searchDate));
+    return registrosFiltrados.reduce((acc, registro) => {
       acc[registro.transportadora] = (acc[registro.transportadora] || 0) + 1;
       return acc;
     }, {});
@@ -217,7 +238,6 @@ function App() {
   const contadores = contarTransportadoras();
 
   const sortedRegistros = [...registros].sort((a, b) => b.id - a.id);
-
 
   // Paginación de registros
   const indexOfLastItem = currentPage * itemsPerPage;
@@ -230,6 +250,19 @@ function App() {
     setCurrentPage(newPage);
   };
 
+  // Nueva lógica de búsqueda y paginación
+  useEffect(() => {
+    if (searchTerm) {
+      const searchIndex = sortedRegistros.findIndex(registro =>
+        registro.codigo.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      if (searchIndex !== -1) {
+        const newPage = Math.floor(searchIndex / itemsPerPage) + 1;
+        setCurrentPage(newPage);
+      }
+    }
+  }, [searchTerm, sortedRegistros, itemsPerPage]);
+
   const filteredRegistros = currentItems.filter((registro) =>
     registro.codigo.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -241,6 +274,13 @@ function App() {
         <p className="green">SERVIENTREGA: {contadores.SERVIENTREGA || 0}</p>
         <p className="blue">COORDINADORA: {contadores.COORDINADORA || 0}</p>
         <p className="orange">INTERRAPIDISIMO: {contadores.INTERRAPIDISIMO || 0}</p>
+        <p className="yellow">TCC: {contadores.TCC || 0}</p>
+        <p className="half-yellow-half-blue">
+          <span className="half-yellow">DOM</span><span className="half-blue">INA: {contadores.DOMINA || 0}</span>
+        </p>
+        <p className="half-green-half-white">
+          <span className="half-green">99M</span><span className="half-white">INUTOS: {contadores["99MINUTOS"] || 0}</span>
+        </p>
       </div>
       <div className="controls" style={{ position: 'absolute', top: 10, right: 10 }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>

@@ -93,6 +93,24 @@ header, .controls {
 .counters p.orange { color: orange; }
 .counters p.blue { color: blue; }
 .counters p.red { color: red; }
+.counters p.yellow { color: yellow; }
+
+/* Estilos para las nuevas transportadoras */
+.half-green {
+  color: green;
+}
+
+.half-white {
+  color: white;
+}
+
+.half-yellow {
+  color: yellow;
+}
+
+.half-blue {
+  color: blue;
+}
 
 table th, table td {
   width: calc(100% / 5);
