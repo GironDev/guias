@@ -1,8 +1,20 @@
 import React, { useState, useRef, useEffect } from 'react';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+import axios from 'axios';
+import { format, parseISO } from 'date-fns';
 import logo from './assets/DROPI-PNG-LOGO.png'; // Asegúrate de ajustar la ruta
 import './App.css';
+
+const getFormattedDate = (dateString) => {
+  const date = parseISO(dateString);
+  return format(date, 'dd-MM-yyyy');
+};
+
+const getCurrentDate = () => {
+  const now = new Date();
+  return format(now, 'yyyy-MM-dd');
+};
 
 function App() {
   const [codigo, setCodigo] = useState('');
@@ -10,11 +22,29 @@ function App() {
   const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [multiCodes, setMultiCodes] = useState('');
+  const [searchDate, setSearchDate] = useState(getCurrentDate());
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(100);
   const inputRef = useRef(null);
 
   useEffect(() => {
     inputRef.current.focus();
-  }, []);
+    fetchRegistros(searchDate);
+  }, [searchDate]);
+
+  const fetchRegistros = async (fecha) => {
+    try {
+      const response = await axios.get('http://localhost:3001/api/registros', { params: { fecha } });
+      const formattedRegistros = response.data.map((registro) => ({
+        ...registro,
+        fecha: getFormattedDate(registro.fecha),
+      }));
+      setRegistros(formattedRegistros);
+      setCurrentPage(1); // Reset current page on new data fetch
+    } catch (err) {
+      console.error('Error al obtener los registros:', err);
+    }
+  };
 
   const handleScan = (event) => {
     setCodigo(event.target.value);
@@ -30,13 +60,13 @@ function App() {
 
   const getTransportadora = (codigo) => {
     if (codigo.startsWith('0240')) return 'ENVIA';
-    if (codigo.startsWith('219') || codigo.startsWith('220') || codigo.startsWith('221')) return 'SERVIENTREGA';
+    if (codigo.startsWith('219') || codigo.startsWith('220') || codigo.starts.startsWith('221')) return 'SERVIENTREGA';
     if (codigo.startsWith('2400')) return 'INTERRAPIDISIMO';
     if (codigo.startsWith('363')) return 'COORDINADORA';
     return 'DESCONOCIDO';
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
     if (codigo.trim() !== '') {
       const sanitizedCodigo = sanitizeCodigo(codigo);
@@ -46,50 +76,60 @@ function App() {
         setError('El código ya existe en los registros');
       } else {
         const nuevoRegistro = {
-          id: registros.length + 1,
           codigo: sanitizedCodigo,
-          fecha: new Date().toLocaleDateString(),
+          fecha: getCurrentDate(),
           transportadora: getTransportadora(sanitizedCodigo),
         };
-        setRegistros([...registros, nuevoRegistro]);
-        setCodigo('');
+        try {
+          const response = await axios.post('http://localhost:3001/api/registros', nuevoRegistro);
+          setRegistros([...registros, { ...response.data, fecha: getFormattedDate(response.data.fecha) }]);
+          setCodigo('');
+        } catch (err) {
+          console.error('Error al guardar el registro:', err);
+        }
       }
     }
   };
 
-  const handleDelete = (id) => {
-    setRegistros(registros.filter((registro) => registro.id !== id));
+  const handleDelete = async (id) => {
+    // Implementa la lógica para eliminar un registro si es necesario
   };
 
-  const handleMultiSubmit = () => {
+  const handleMultiSubmit = async () => {
     const codes = multiCodes.split('\n').map((code) => code.trim()).filter((code) => code !== '');
-    const startingId = registros.length ? registros[registros.length - 1].id + 1 : 1;
-    const newRegistros = codes.map((code, index) => {
+    const newRegistros = codes.map((code) => {
       const sanitizedCodigo = sanitizeCodigo(code);
-      const nuevoRegistro = {
-        id: startingId + index,
+      return {
         codigo: sanitizedCodigo,
-        fecha: new Date().toLocaleDateString(),
+        fecha: getCurrentDate(),
         transportadora: getTransportadora(sanitizedCodigo),
       };
-      return nuevoRegistro;
     });
 
-    const uniqueNewRegistros = newRegistros.filter(
-      (nuevoRegistro) => !registros.some((registro) => registro.codigo === nuevoRegistro.codigo)
-    );
-
-    setRegistros([...registros, ...uniqueNewRegistros]);
-    setMultiCodes('');
+    try {
+      for (const registro of newRegistros) {
+        const response = await axios.post('http://localhost:3001/api/registros', registro);
+        setRegistros((prevRegistros) => [
+          ...prevRegistros,
+          { ...response.data, fecha: getFormattedDate(response.data.fecha) },
+        ]);
+      }
+      fetchRegistros(searchDate);
+      setMultiCodes('');
+    } catch (err) {
+      console.error('Error al guardar los registros:', err);
+    }
   };
 
   const imprimirManifiesto = () => {
     const doc = new jsPDF();
-    const fecha = new Date().toLocaleDateString();
+    const fecha = getFormattedDate(searchDate);
     const registrosPorPagina = 20 * 6;
     const pageWidth = doc.internal.pageSize.width;
 
-    const registrosPorTransportadora = registros.reduce((acc, registro) => {
+    const registrosFiltrados = registros.filter(registro => registro.fecha === getFormattedDate(searchDate));
+
+    const registrosPorTransportadora = registrosFiltrados.reduce((acc, registro) => {
       if (!acc[registro.transportadora]) {
         acc[registro.transportadora] = [];
       }
@@ -129,11 +169,11 @@ function App() {
 
         const text = `FECHA MANIFIESTO ${fecha} PARA ${transportadora}`;
         const textWidth = doc.getTextWidth(text);
-        const textX = (pageWidth - textWidth - 40) / 2; // Ajusta el espacio para el logo
+        const textX = (pageWidth - textWidth - 60) / 2; // Ajusta el espacio para el logo
         doc.text(text, textX, 20);
 
         // Añadir el logo a la derecha del texto
-        doc.addImage(logo, 'PNG', textX + textWidth + 20, 5, 30, 30); // Ajusta la posición y el tamaño del logo según sea necesario
+        doc.addImage(logo, 'PNG', textX + textWidth + 10, 10, 50, 20); // Ajusta la posición y el tamaño del logo según sea necesario
 
         doc.autoTable({
           startY: 30, // Ajusta la posición de inicio para evitar superposición con el logo y el texto
@@ -176,7 +216,21 @@ function App() {
 
   const contadores = contarTransportadoras();
 
-  const filteredRegistros = registros.filter((registro) =>
+  const sortedRegistros = [...registros].sort((a, b) => b.id - a.id);
+
+
+  // Paginación de registros
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentItems = sortedRegistros.slice(indexOfFirstItem, indexOfLastItem);
+
+  const totalPages = Math.ceil(sortedRegistros.length / itemsPerPage);
+
+  const handlePageChange = (newPage) => {
+    setCurrentPage(newPage);
+  };
+
+  const filteredRegistros = currentItems.filter((registro) =>
     registro.codigo.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -205,6 +259,12 @@ function App() {
           placeholder="Buscar registros"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
+        />
+        <input
+          type="date"
+          value={searchDate}
+          onChange={(e) => setSearchDate(e.target.value)}
+          style={{ marginTop: '10px' }}
         />
       </div>
       <h1 className="title">Pistoleo</h1>
@@ -254,6 +314,17 @@ function App() {
           ))}
         </tbody>
       </table>
+      <div className="pagination">
+        {Array.from({ length: totalPages }, (_, index) => (
+          <button
+            key={index + 1}
+            onClick={() => handlePageChange(index + 1)}
+            className={index + 1 === currentPage ? 'active' : ''}
+          >
+            {index + 1}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
