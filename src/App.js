@@ -75,6 +75,27 @@ function App() {
     setError('');
   };
 
+  const sanitizeCodigo = (codigo) => {
+    if (!codigo || typeof codigo !== 'string') return '';
+    
+    if (codigo.startsWith('7363') && codigo.endsWith('001')) {
+      return codigo.slice(1, -3);
+    }
+    return codigo;
+  };
+
+  const getTransportadora = (codigo) => {
+    if (!codigo || typeof codigo !== 'string') {
+      return 'DESCONOCIDO';
+    }
+  
+    if (codigo.startsWith('0240')) return 'ENVIA';
+    if (codigo.startsWith('219') || codigo.startsWith('220') || codigo.startsWith('221')) return 'SERVIENTREGA';
+    if (codigo.startsWith('2400')) return 'INTERRAPIDISIMO';
+    if (codigo.startsWith('363')) return 'COORDINADORA';
+    return 'DESCONOCIDO';
+  };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
     if (codigo && codigo.trim() !== '') {
@@ -85,7 +106,7 @@ function App() {
       }
 
       const codigoExistente = registros.some((registro) => registro.codigo === sanitizedCodigo);
-
+  
       if (codigoExistente) {
         setError('El código ya existe en los registros');
       } else {
@@ -104,6 +125,7 @@ function App() {
       }
     }
   };
+  
 
   const handleDelete = async (id) => {
     try {
@@ -182,11 +204,12 @@ function App() {
   
         doc.setFontSize(10);
         doc.setFont('helvetica', 'bold');
-        doc.text(`PÁGINA ${i + 1} DE ${totalPaginas}`, 10, 10);
+        doc.text('PÁGINA ${i + 1} DE ${totalPaginas}', 10, 10);
         doc.setFontSize(14);
         doc.setFont('helvetica', 'bold');
   
         const text = `FECHA MANIFIESTO ${fecha} PARA ${transportadora}`;
+
         const textWidth = doc.getTextWidth(text);
         const textX = (pageWidth - textWidth - 60) / 2; // Ajusta el espacio para el logo
         doc.text(text, textX, 20);
@@ -213,7 +236,7 @@ function App() {
         doc.text('FECHA RECOLECCIÓN', 140, pageHeight - 50);
         doc.text('OBSERVACIONES', 10, pageHeight - 30);
         doc.text(`TOTAL PIEZAS ENTREGADAS: ${registrosDeTransportadora.length}`, 140, pageHeight - 10);
-  
+
         if (
           i < totalPaginas - 1 ||
           Object.keys(registrosPorTransportadora).indexOf(transportadora) < Object.keys(registrosPorTransportadora).length - 1
