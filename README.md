@@ -1,3 +1,10 @@
+CREATE TABLE registros (
+    id SERIAL PRIMARY KEY,
+    codigo VARCHAR(255) NOT NULL,
+    fecha DATE NOT NULL,
+    transportadora VARCHAR(255) NOT NULL
+);
+
 # Getting Started with Create React App
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
