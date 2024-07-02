@@ -41,7 +41,7 @@ app.get('/api/registros', async (req, res) => {
   }
 });
 
-// Agregar el endpoint DELETE
+// Endpoint DELETE para eliminar registros
 app.delete('/api/registros/:id', async (req, res) => {
   const { id } = req.params;
   try {
@@ -53,6 +53,25 @@ app.delete('/api/registros/:id', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Error al eliminar el registro' });
+  }
+});
+
+// Agregar el endpoint PUT
+app.put('/api/registros/:id', async (req, res) => {
+  const { id } = req.params;
+  const { transportadora } = req.body;
+  try {
+    const result = await pool.query(
+      'UPDATE registros SET transportadora = $1 WHERE id = $2 RETURNING *',
+      [transportadora, id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Registro no encontrado' });
+    }
+    res.status(200).json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al actualizar el registro' });
   }
 });
 
